@@ -9,7 +9,12 @@ import (
 type myKey uint32
 
 func (k myKey) Hash() uint64 {
-	return uint64(k)
+	// https://code.google.com/p/fast-hash
+	h := uint64(k)
+	h ^= h >> 23
+	h *= 0x2127599bf4325c37
+	h ^= h >> 47
+	return uint64(h)
 }
 
 type myCollKey uint32
