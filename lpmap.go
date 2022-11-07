@@ -1,3 +1,12 @@
+/*
+lpmap implements a linear-probing hash map that supports generic keys and values.
+Keys must implement a `Hash()` method that returns a `uint64`. Values may be of
+any type. Unlike other implementations, this version supports deletion of entries.
+
+Linear probing hash maps are generally faster than standard hash maps when the fill factor
+is set to 0.5 or less (this can result in increased memory usage), and when the number of
+entries is very large (in general, exceeding 1 million).
+*/
 package lpmap
 
 type KeyType interface {
@@ -12,6 +21,8 @@ const (
 	occupied status = 2
 )
 
+const defaultFillFactor = 0.5
+
 type Map[K KeyType, V any] struct {
 	keys       []K
 	values     []V
@@ -20,14 +31,20 @@ type Map[K KeyType, V any] struct {
 	numEntries int
 }
 
-func New[K KeyType, V any](size int, threshold float64) Map[K, V] {
-	nEntries := int(float64(size)/threshold) + 1
+// New creates a new linear probing hash map with the given size and load factor.
+func New[K KeyType, V any](size int, fillFactor float64) Map[K, V] {
+	if fillFactor <= 0 || fillFactor > 1 {
+		fillFactor = defaultFillFactor
+	}
+	nEntries := int(float64(size)/fillFactor) + 1
 	keys := make([]K, nEntries)
 	values := make([]V, nEntries)
 	statuses := make([]status, nEntries)
-	return Map[K, V]{keys, values, statuses, threshold, 0}
+	return Map[K, V]{keys, values, statuses, fillFactor, 0}
 }
 
+// Get returns a pointer to the value associated with the provided key along
+// with a boolean set to `true` if found, `false` otherwise.
 func (m *Map[K, V]) Get(k K) (*V, bool) {
 	if m.numEntries == 0 {
 		return nil, false
@@ -50,6 +67,7 @@ func (m *Map[K, V]) Get(k K) (*V, bool) {
 	}
 }
 
+// Values returns a channel of values set in the map.
 func (m *Map[K, V]) Values() chan V {
 	ch := make(chan V, m.numEntries)
 	defer close(ch)
@@ -60,10 +78,9 @@ func (m *Map[K, V]) Values() chan V {
 			}
 		}
 	}()
-
 	return ch
-
 }
+
 func getNextAvailableIndex[K KeyType](keys []K, statuses []status, k K) int {
 	i := int(k.Hash() % uint64(len(keys)))
 
@@ -78,6 +95,7 @@ func getNextAvailableIndex[K KeyType](keys []K, statuses []status, k K) int {
 		}
 	}
 }
+
 func (m *Map[K, V]) resize(newSize int) {
 
 	if newSize < m.numEntries+1 {
@@ -107,6 +125,7 @@ func (m *Map[K, V]) resize(newSize int) {
 	*m = newMap
 }
 
+// Set inserts a key/value mapping into the hash map.
 func (m *Map[K, V]) Set(k K, v V) {
 	if float64(m.numEntries)+1 > float64(len(m.keys))*m.threshold {
 		m.resize(2 * len(m.keys))
@@ -134,6 +153,8 @@ func (m *Map[K, V]) Set(k K, v V) {
 	}
 }
 
+// Delete removes a key/value mapping (by key) and
+// returns true if found, false otherwise.
 func (m *Map[K, V]) Delete(k K) bool {
 	if m.numEntries == 0 {
 		return false
@@ -156,6 +177,7 @@ func (m *Map[K, V]) Delete(k K) bool {
 	}
 }
 
+// Size returns the number of entries in the hash map.
 func (m *Map[K, V]) Size() int {
 	return m.numEntries
 }
